@@ -83,6 +83,23 @@ def base_url():
     )
 
 
+def get_filetype(article_name):
+    config_namespaces = ["User:", "MediaWiki:"]
+    config_extensions = {
+        ".css": "css",
+        ".js": "javascript",
+        ".json": "json"
+    }
+    if article_name.startswith("Module:"):
+        return "lua"
+    if any((article_name.startswith(n) for n in config_namespaces)):
+        for extension, filetype in config_extensions.items():
+            if article_name.endswith(extension):
+                return filetype
+
+    return "mediawiki"
+
+
 def get_logged_in_client(
     uri_scheme,
     base_url,
@@ -194,6 +211,7 @@ def infer_default(article_name):
         article_name = article_name.decode("utf-8")
     return article_name
 
+
 def mw_list_maps():
     vim.command('nnoremap <buffer> <Enter> ^t]"wyi[:MWRead <C-R>w<CR>')
 
@@ -210,9 +228,11 @@ def mw_standardize_name(article_name):
 
 # Commands.
 
+
 def mw_save_name(article_name):
     vim.command('file %s.wiki' % article_name)
     vim.command("let b:article_name = '%s'" % sq_escape(article_name))
+
 
 def mw_read(article_name):
     if isinstance(article_name, six.binary_type):
@@ -229,12 +249,17 @@ def mw_read(article_name):
         # make a new special buffer
         vim.command('enew')
         vim.command('setlocal buftype=acwrite')
-        vim.command('set ft=mediawiki')
+        vim.command(f"set ft={get_filetype(article_name)}")
         vim.current.buffer[:] = s.Pages[article_name].text().split("\n")
         vim.command('set nomodified')
         mw_save_name(article_name)
         vim.command('redraw')
+        vim.command(
+            "let b:article_name = '%s'"
+            % sq_escape(article_name)
+        )
         vim.command("echo 'Loaded %s'" % article_name)
+
 
 def mw_backlinks(article_name):
     article_name = infer_default(article_name)
@@ -254,6 +279,7 @@ def mw_backlinks(article_name):
     vim.command('redraw')
     vim.command("echo 'Retrieved backlinks for %s'" % article_name)
 
+
 def mw_move_helper(no_redirect, new_name):
     article_name = infer_default(None)
     article_name = mw_standardize_name(article_name)
@@ -262,31 +288,35 @@ def mw_move_helper(no_redirect, new_name):
     s = site()
     # TODO: It would be good to support movesubpages...
     tresponse = s.get("query", **{
-            'meta': 'tokens',
-            'format': 'json',
-            'type': 'csrf'
-        })
+        'meta': 'tokens',
+        'format': 'json',
+        'type': 'csrf'
+    })
     print(tresponse)
     token = tresponse['query']['tokens']['csrftoken']
     s.api("move",
-            **{
-                'from': article_name,
-                'to': new_name,
-                'noredirect': no_redirect,
-                'movesubpages': True,
-                'movetalk': True,
-                'reason': reason,
-                'token': token
-            })
+          **{
+              'from': article_name,
+              'to': new_name,
+              'noredirect': no_redirect,
+              'movesubpages': True,
+              'movetalk': True,
+              'reason': reason,
+              'token': token
+          })
     mw_save_name(new_name)
     vim.command('redraw')
-    print("Renamed from {} to {}. No redirect was {}".format(article_name, new_name, no_redirect))
+    print("Renamed from {} to {}. No redirect was {}".format(
+        article_name, new_name, no_redirect))
+
 
 def mw_move(new_name):
     mw_move_helper(False, new_name)
 
+
 def mw_move_no_redirect(new_name):
     mw_move_helper(True, new_name)
+
 
 def mw_write(article_name):
     article_name = infer_default(article_name)
@@ -327,7 +357,7 @@ def mw_diff(article_name):
     vim.command(
         "setlocal buftype=nofile bufhidden=delete nobuflisted"
     )
-    vim.command("set ft=mediawiki")
+    vim.command(f"set ft={get_filetype(article_name)}")
     vim.current.buffer[:] = (
         s.Pages[article_name].text().split("\n")
     )
@@ -395,9 +425,9 @@ def mw_browse(article_name):
     article_name = mw_standardize_name(article_name)
 
     url = 'http://%s%sindex.php/%s' % (
-            base_url(),
-            get_from_config('g:mediawiki_editor_path') or "/wiki/",
-            article_name)
+        base_url(),
+        get_from_config('g:mediawiki_editor_path') or "/wiki/",
+        article_name)
     if not var_exists('g:loaded_netrw'):
         vim.command('runtime! autoload/netrw.vim')
 
